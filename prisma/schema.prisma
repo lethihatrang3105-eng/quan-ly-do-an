@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  GV
+  SV
+}
+
+enum Status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Chuyên ngành
+model Major {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  users  User[]
+  topics Topic[]
+}
+
+// Người dùng: Admin, Giảng viên, Sinh viên
+model User {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // mã GV/SV
+  name      String
+  email     String   @unique
+  password  String   // mật khẩu đã mã hoá, không lưu chữ thường
+  role      Role
+  active    Boolean  @default(true)
+  majorId   Int?
+  major     Major?   @relation(fields: [majorId], references: [id])
+  createdAt DateTime @default(now())
+
+  supervisedTopics   Topic[]         @relation("Supervisor")
+  reviewedTopics     Topic[]         @relation("Reviewer")
+  registrations      Registration[]
+  councilMemberships CouncilMember[]
+  grades             Grade[]
+  notifications      Notification[]
+}
+
+// Đợt đồ án / khoá luận
+model ProjectPeriod {
+  id        Int       @id @default(autoincrement())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isOpen    Boolean   @default(true)
+  topics    Topic[]
+  councils  Council[]
+}
+
+// Đề tài
+model Topic {
+  id           Int       @id @default(autoincrement())
+  title        String
+  description  String?
+  status       Status    @default(PENDING)
+  periodId     Int
+  period       ProjectPeriod @relation(fields: [periodId], references: [id])
+  majorId      Int?
+  major        Major?    @relation(fields: [majorId], references: [id])
+  supervisorId Int
+  supervisor   User      @relation("Supervisor", fields: [supervisorId], references: [id])
+  reviewerId   Int?
+  reviewer     User?     @relation("Reviewer", fields: [reviewerId], references: [id])
+  councilId    Int?
+  council      Council?  @relation(fields: [councilId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  registrations Registration[]
+  progress      ProgressReport[]
+  grades        Grade[]
+}
+
+// Sinh viên đăng ký đề tài
+model Registration {
+  id        Int      @id @default(autoincrement())
+  topicId   Int
+  topic     Topic    @relation(fields: [topicId], references: [id])
+  studentId Int
+  student   User     @relation(fields: [studentId], references: [id])
+  status    Status   @default(PENDING)
+  createdAt DateTime @default(now())
+
+  @@unique([topicId, studentId])
+}
+
+// Báo cáo tiến độ
+model ProgressReport {
+  id        Int      @id @default(autoincrement())
+  topicId   Int
+  topic     Topic    @relation(fields: [topicId], references: [id])
+  week      Int
+  content   String
+  fileUrl   String?
+  comment   String?  // nhận xét của GV
+  createdAt DateTime @default(now())
+}
+
+// Hội đồng bảo vệ
+model Council {
+  id          Int             @id @default(autoincrement())
+  name        String
+  periodId    Int
+  period      ProjectPeriod   @relation(fields: [periodId], references: [id])
+  defenseDate DateTime?
+  room        String?
+  members     CouncilMember[]
+  topics      Topic[]
+}
+
+model CouncilMember {
+  id        Int     @id @default(autoincrement())
+  councilId Int
+  council   Council @relation(fields: [councilId], references: [id])
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id])
+  position  String  // Chủ tịch, Thư ký, Uỷ viên
+
+  @@unique([councilId, userId])
+}
+
+// Điểm
+model Grade {
+  id        Int     @id @default(autoincrement())
+  topicId   Int
+  topic     Topic   @relation(fields: [topicId], references: [id])
+  graderId  Int
+  grader    User    @relation(fields: [graderId], references: [id])
+  gradeType String  // HUONG_DAN, PHAN_BIEN, HOI_DONG
+  score     Float
+  comment   String?
+
+  @@unique([topicId, graderId, gradeType])
+}
+
+// Thông báo (userId trống = gửi cho tất cả)
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  title     String
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
